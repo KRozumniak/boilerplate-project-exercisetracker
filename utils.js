@@ -2,7 +2,6 @@ import { format } from 'date-fns-tz';
 
 const defaultDateFormat = 'yyyy-MM-dd';
 
-// date validation
 export function isDateValid(value) {
   const expectedDateStringLength = 10;
   if (!isNaN(new Date(value)) && value.length === expectedDateStringLength) {
@@ -86,13 +85,24 @@ export function isIntegerValid(value) {
   }
 
   const number = Number(value);
-  if (Number.isNaN(number)) {
+  if (Number.isNaN(number) || number < 0) {
     return false;
   }
   return true;
 }
 
-// string input validation
+export function isUsernameValid(username) {
+  if (!username) {
+    return false;
+  }
+
+  if (!username.trim().length) {
+    return false;
+  }
+
+  return true;
+}
+
 export function isDescriptionValid(value) {
   if (typeof value === 'string' && !!value.trim().length && value) {
     return true;
