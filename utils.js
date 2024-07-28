@@ -2,60 +2,108 @@ import { format } from 'date-fns-tz';
 
 const defaultDateFormat = 'yyyy-MM-dd';
 
-export function getFormattedDate(value) {
-  if (!isDateValid(value)) {
-    const date = new Date();
-    const formattedDate = format(date, defaultDateFormat);
-    return formattedDate;
+// date validation
+export function isDateValid(value) {
+  const expectedDateStringLength = 10;
+  if (!isNaN(new Date(value)) && value.length === expectedDateStringLength) {
+    return true;
   }
-
-  return value;
+  return false;
 }
 
-export function isDateValid(date) {
-  if (!date) {
+export function getValidatedInputs({ userId, duration, description, date }) {
+  const errors = [];
+
+  if (!isUserIdValid(userId)) {
+    const error = buildError({
+      message: 'Invalid user id',
+    });
+    errors.push(error);
+  }
+
+  if (!isDurationValid(duration)) {
+    const error = buildError({
+      message: 'Invalid duration',
+    });
+    errors.push(error);
+  }
+
+  if (!isDescriptionValid(description)) {
+    const error = buildError({
+      message: 'Invalid description',
+    });
+    errors.push(error);
+  }
+
+  if (date) {
+    if (!isDateValid(date)) {
+      const error = buildError({
+        message: 'Invalid date',
+      });
+      errors.push(error);
+    }
+  } else {
+    date = getFormattedCurrentDate();
+  }
+
+  if (errors.length) {
+    const errorsMessage = errors
+      .map((e) => {
+        return e.message;
+      })
+      .join('. ');
+    const error = buildError({
+      message: errorsMessage,
+    });
+    return { error };
+  }
+
+  return {
+    userId,
+    duration,
+    description,
+    date,
+  };
+}
+
+export function getFormattedCurrentDate() {
+  const date = new Date();
+  const formattedDate = format(date, defaultDateFormat);
+  return formattedDate;
+}
+
+export function isUserIdValid(value) {
+  return isIntegerValid(value);
+}
+
+export function isDurationValid(value) {
+  return isIntegerValid(value);
+}
+
+export function isIntegerValid(value) {
+  if (!value || !value.trim().length) {
     return false;
   }
 
-  const dateCheck = new Date(date);
-  if (dateCheck === '12/31/1969') {
+  const number = Number(value);
+  if (Number.isNaN(number)) {
     return false;
   }
-
   return true;
 }
 
-export function validateNumberInput(n) {
-  if (!n) {
-    throw new Error('Number input invalid');
+// string input validation
+export function isDescriptionValid(value) {
+  if (typeof value === 'string' && !!value.trim().length && value) {
+    return true;
   }
-
-  const convertedNumber = Number(n);
-  if (Number.isNaN(convertedNumber)) {
-    throw new Error('Number input invalid');
-  }
-
-  return convertedNumber;
-}
-
-export function validateStringInput(s) {
-  if (!n.trim().length || !n) {
-    throw new Error('String input invalid');
-  }
-  return s;
+  return false;
 }
 
 export function filterLogsByQueryParams(logs = [], query) {
   const from = query.from;
   const to = query.to;
   const limit = query.limit;
-
-  // console.log(from);
-  // console.log(to);
-  // console.log(limit);
-
-  // console.log('date from: ', Date(from));
-  // console.log('date to: ', Date(to));
 
   if (!from && !to && !limit) {
     return logs;
@@ -83,45 +131,13 @@ export function filterLogsByQueryParams(logs = [], query) {
   }
 
   return logs;
-
-  // if (from && to && limit) {
-  //   const filteredLogs = logs.filter((log) => {
-  //     return Date(log.date) >= Date(from) && Date(log.date) <= Date(to);
-  //   });
-  //   // console.log('// add limit calculation');
-
-  //   const limitedFilteredLogs = [];
-
-  //   filteredLogs.forEach((log) => {
-  //     if (limitedFilteredLogs.length === +limit) {
-  //       return;
-  //     }
-  //     limitedFilteredLogs.push(log);
-  //   });
-
-  //   // console.log('limitedFilteredLogs: ', limitedFilteredLogs);
-
-  //   return limitedFilteredLogs;
-  // }
-
-  // const filteredExercises = [];
-  // allExercises.forEach((exercise) => {
-  //   if (exercise.userId === user.id) {
-  //     const mappedExercise = {
-  //       id: exercise.exerciseId,
-  //       description: exercise.description,
-  //       duration: exercise.duration,
-  //       date: exercise.date,
-  //     };
-
-  //     filteredExercises.push(mappedExercise);
-  //   }
-  // });
 }
 
-export function buildErrorResponse({ code = 400, message }) {
-  return {
+export function buildError({ code = 400, message }) {
+  const error = {
     code,
     message,
   };
+  console.error(error);
+  return error;
 }

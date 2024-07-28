@@ -1,32 +1,45 @@
 import { db } from '../../initDB.js';
 
 import {
-  buildErrorResponse,
+  buildError,
   filterLogsByQueryParams,
-  getFormattedDate,
+  getValidatedInputs,
 } from '../../utils.js';
 
-export const createExercise = (userId, body) => {
-  const { description, duration, date } = body;
-  const exerciseDate = getFormattedDate(date);
-
+export function createExercise(req, res, next) {
   try {
+    const inputs = getValidatedInputs({
+      ...req.body,
+      userId: req.params.id,
+    });
+
+    if (inputs.error) {
+      console.log('erroing out');
+      res.status(400).json(inputs.error);
+      return;
+    }
+
+    const { userId, duration, description, date } = inputs;
+
     const result = db
       .prepare(
         'INSERT INTO exercises (description, duration, date, userId) VALUES (?, ?, ?, ?)'
       )
-      .run(description, duration, exerciseDate, userId);
+      .run(description, duration, date, userId);
 
     const createdExercise = getExercisesById(result.lastInsertRowid);
 
-    return createdExercise;
-  } catch (error) {
-    console.log(error);
-    return buildErrorResponse({
-      message: 'Bad request',
-    });
+    return res.json(createdExercise);
+  } catch (err) {
+    if (err.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+      const error = buildError({
+        message: 'Associated user does not exist',
+      });
+      res.status(error.code).json({ error });
+    }
+    res.status(400).json({ error: 'Bad Request' });
   }
-};
+}
 
 export function getAllUsers() {
   const users = db.prepare('SELECT * FROM users').all();
@@ -73,7 +86,7 @@ export const createUser = (username) => {
       error.message = 'Username already exists';
     }
 
-    return buildErrorResponse({
+    return buildError({
       message: error.message,
     });
   }
@@ -89,7 +102,7 @@ function getAllExercises() {
 
     return allExercises;
   } catch (error) {
-    return buildErrorResponse({
+    return buildError({
       message: error.message,
     });
   }

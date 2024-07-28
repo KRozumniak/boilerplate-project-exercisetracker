@@ -22,15 +22,7 @@ router.post('/', function (req, res, next) {
 });
 
 /* POST a new exercise. */
-router.post('/:id/exercises/', function (req, res, next) {
-  try {
-    const userId = req.params.id;
-    const createdExercise = createExercise(userId, req.body);
-    res.json(createdExercise);
-  } catch (err) {
-    res.sendStatus(500);
-  }
-});
+router.post('/:id/exercises/', createExercise);
 
 /* GET user logs by user id. */
 router.get('/:id/logs/', function (req, res, next) {
