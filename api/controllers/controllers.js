@@ -4,6 +4,8 @@ import {
   buildError,
   filterLogsByQueryParams,
   getValidatedInputs,
+  isUserIdValid,
+  isUsernameValid,
 } from '../../utils.js';
 
 export function createExercise(req, res, next) {
@@ -14,9 +16,7 @@ export function createExercise(req, res, next) {
     });
 
     if (inputs.error) {
-      console.log('erroing out');
-      res.status(400).json(inputs.error);
-      return;
+      return res.status(400).json(inputs.error);
     }
 
     const { userId, duration, description, date } = inputs;
@@ -35,15 +35,24 @@ export function createExercise(req, res, next) {
       const error = buildError({
         message: 'Associated user does not exist',
       });
-      res.status(error.code).json({ error });
+      return res.status(error.code).json({ error });
     }
-    res.status(400).json({ error: 'Bad Request' });
+    return res.status(400).json({ error: 'Bad Request' });
   }
 }
 
-export function getAllUsers() {
+export function getAllUsers(req, res, next) {
   const users = db.prepare('SELECT * FROM users').all();
-  return users;
+
+  if (!users.length) {
+    const error = buildError({
+      code: 404,
+      message: 'No users found',
+    });
+    return res.status(error.code).json(error);
+  }
+
+  return res.json(users);
 }
 
 export const getUserById = (id) => {
@@ -51,12 +60,26 @@ export const getUserById = (id) => {
   return user;
 };
 
-export function getUserLogsById(userId, query) {
-  if (!userId) {
-    throw new Error('User does not exist');
+export function getUserLogsById(req, res, next) {
+  if (!isUserIdValid(req.params.id)) {
+    const error = buildError({
+      message: 'User id is invalid',
+    });
+    return res.status(error.code).json(error);
   }
-  const intUserId = Number(userId);
-  const selectedExercises = getExercisesByUserId(intUserId, query.limit);
+
+  const { query, params } = req;
+  const userId = Number(params.id);
+
+  const selectedExercises = getExercisesByUserId(userId, query.limit);
+
+  if (!selectedExercises.length) {
+    const error = buildError({
+      code: 404,
+      message: 'Exercises not found',
+    });
+    return res.status(error.code).json(error);
+  }
 
   // revisit the date filters
   const filteredLogsByQueryParams = filterLogsByQueryParams(
@@ -64,14 +87,16 @@ export function getUserLogsById(userId, query) {
     query
   );
 
-  return {
+  const logs = {
     logs: filteredLogsByQueryParams,
     count: filteredLogsByQueryParams.length,
   };
+  return res.json(logs);
 }
 
-export const createUser = (username) => {
+export const createUser = (req, res, next) => {
   try {
+    const { username } = req.body;
     if (!isUsernameValid(username)) {
       throw new Error('Invalid username');
     }
@@ -80,33 +105,18 @@ export const createUser = (username) => {
       .run(username);
 
     const newUser = getUserById(result.lastInsertRowid);
-    return newUser;
-  } catch (error) {
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      error.message = 'Username already exists';
+    return res.json(newUser);
+  } catch (err) {
+    if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      err.message = 'Username already exists';
     }
 
-    return buildError({
-      message: error.message,
+    const error = buildError({
+      message: err.message,
     });
+    return res.status(error.code).json(error);
   }
 };
-
-function getAllExercises() {
-  try {
-    const allExercises = db.prepare('SELECT * FROM exercises').all();
-
-    if (!allExercises) {
-      throw new Error('Exercises do not exist');
-    }
-
-    return allExercises;
-  } catch (error) {
-    return buildError({
-      message: error.message,
-    });
-  }
-}
 
 function getExercisesByUserId(id, limit) {
   const maxLimit = 1000;
@@ -115,10 +125,6 @@ function getExercisesByUserId(id, limit) {
   const selectedExercises = db
     .prepare('SELECT * FROM exercises WHERE userId = ? ORDER BY userId LIMIT ?')
     .all(id, qLimit);
-
-  if (!selectedExercises) {
-    throw new Error('Exercises do not exist, 400');
-  }
 
   return selectedExercises;
 }
@@ -133,16 +139,4 @@ function getExercisesById(id) {
   }
 
   return searchedExercise;
-}
-
-function isUsernameValid(username) {
-  if (!username) {
-    return false;
-  }
-
-  if (!username.trim().length) {
-    return false;
-  }
-
-  return true;
 }
