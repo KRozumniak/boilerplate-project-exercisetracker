@@ -1,12 +1,15 @@
+import { throwError } from '../../utils/error-utils.js';
 import { db } from '../../initDB.js';
 
+import { filterLogsByDate } from '../../utils/utils.js';
+
 import {
-  buildError,
-  filterLogsByQueryParams,
   getValidatedInputs,
+  isDateQueryParamValid,
+  isLimitQueryParamValid,
   isUserIdValid,
   isUsernameValid,
-} from '../../utils.js';
+} from '../../validation.js';
 
 export function createExercise(req, res, next) {
   try {
@@ -16,7 +19,7 @@ export function createExercise(req, res, next) {
     });
 
     if (inputs.error) {
-      return res.status(400).json(inputs.error);
+      throwError(inputs.error.message, 400);
     }
 
     const { userId, duration, description, date } = inputs;
@@ -27,78 +30,104 @@ export function createExercise(req, res, next) {
       )
       .run(description, duration, date, userId);
 
-    const createdExercise = getExercisesById(result.lastInsertRowid);
+    const createdExercise = db
+      .prepare('SELECT * FROM exercises WHERE exerciseId = ?')
+      .get(result.lastInsertRowid);
 
     return res.json(createdExercise);
   } catch (err) {
     if (err.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
-      const error = buildError({
-        message: 'Associated user does not exist',
-      });
-      return res.status(error.code).json({ error });
+      err.message = 'Associated user does not exist';
+      err.statusCode = 400;
     }
-    return res.status(400).json({ error: 'Bad Request' });
+
+    next(err);
   }
 }
 
 export function getAllUsers(req, res, next) {
-  const users = db.prepare('SELECT * FROM users').all();
+  try {
+    const users = db.prepare('SELECT * FROM users').all();
 
-  if (!users.length) {
-    const error = buildError({
-      code: 404,
-      message: 'No users found',
-    });
-    return res.status(error.code).json(error);
+    if (!users.length) {
+      throwError('No users found', 404);
+    }
+
+    return res.json(users);
+  } catch (error) {
+    next(error);
   }
-
-  return res.json(users);
 }
 
 export const getUserById = (id) => {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-  return user;
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    if (!user) {
+      throwError('No user found', 404);
+    }
+
+    return user;
+  } catch (error) {
+    next(error);
+  }
 };
 
 export function getUserLogsById(req, res, next) {
-  if (!isUserIdValid(req.params.id)) {
-    const error = buildError({
-      message: 'User id is invalid',
-    });
-    return res.status(error.code).json(error);
+  try {
+    if (!isUserIdValid(req.params.id)) {
+      throwError('Invalid user id', 400);
+    }
+
+    const { query, params } = req;
+    const userId = Number(params.id);
+
+    if (query && query.from) {
+      if (!isDateQueryParamValid(query.from)) {
+        throwError('Invalid from date query', 400);
+      }
+    }
+
+    if (query && query.to) {
+      if (!isDateQueryParamValid(query.to)) {
+        throwError('Invalid to date query', 400);
+      }
+    }
+
+    if (query && query.limit) {
+      if (!isLimitQueryParamValid(query.limit)) {
+        throwError('Invalid limit query', 400);
+      }
+    }
+
+    const selectedExercises = getExercisesByUserId(userId, query.limit);
+    if (!selectedExercises.length) {
+      throwError('No exercises found', 404);
+    }
+
+    const filteredLogsByQueryParams = filterLogsByDate(
+      selectedExercises,
+      query
+    );
+
+    if (!filteredLogsByQueryParams.length) {
+      throwError('No queried exercises found', 404);
+    }
+
+    const logs = {
+      logs: filteredLogsByQueryParams,
+      count: filteredLogsByQueryParams.length,
+    };
+    return res.json(logs);
+  } catch (error) {
+    next(error);
   }
-
-  const { query, params } = req;
-  const userId = Number(params.id);
-
-  const selectedExercises = getExercisesByUserId(userId, query.limit);
-
-  if (!selectedExercises.length) {
-    const error = buildError({
-      code: 404,
-      message: 'Exercises not found',
-    });
-    return res.status(error.code).json(error);
-  }
-
-  // revisit the date filters
-  const filteredLogsByQueryParams = filterLogsByQueryParams(
-    selectedExercises,
-    query
-  );
-
-  const logs = {
-    logs: filteredLogsByQueryParams,
-    count: filteredLogsByQueryParams.length,
-  };
-  return res.json(logs);
 }
 
 export const createUser = (req, res, next) => {
   try {
     const { username } = req.body;
     if (!isUsernameValid(username)) {
-      throw new Error('Invalid username');
+      throwError('Invalid username', 400);
     }
     const result = db
       .prepare('INSERT INTO users (username) VALUES (?)')
@@ -111,10 +140,7 @@ export const createUser = (req, res, next) => {
       err.message = 'Username already exists';
     }
 
-    const error = buildError({
-      message: err.message,
-    });
-    return res.status(error.code).json(error);
+    next(err);
   }
 };
 
@@ -127,16 +153,4 @@ function getExercisesByUserId(id, limit) {
     .all(id, qLimit);
 
   return selectedExercises;
-}
-
-function getExercisesById(id) {
-  const searchedExercise = db
-    .prepare('SELECT * FROM exercises WHERE exerciseId = ?')
-    .get(id);
-
-  if (!searchedExercise) {
-    throw new Error('Exercise does not exist, 400');
-  }
-
-  return searchedExercise;
 }
