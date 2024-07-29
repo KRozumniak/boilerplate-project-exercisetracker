@@ -6,6 +6,7 @@ import routes from './api/routes/routes.js';
 import bodyParser from 'body-parser';
 
 import dotenv from 'dotenv';
+import { errorHandlerMiddleware } from './middleware/errorHandler.js';
 dotenv.config();
 
 const app = express();
@@ -20,6 +21,8 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/users', routes);
+
+app.use(errorHandlerMiddleware);
 
 const listener = app.listen(process.env.PORT || 3000, () => {
   console.log('Your app is listening on port ' + listener.address().port);
