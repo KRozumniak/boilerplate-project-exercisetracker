@@ -7,6 +7,7 @@ import bodyParser from 'body-parser';
 
 import dotenv from 'dotenv';
 import { errorHandlerMiddleware } from './middleware/errorHandler.js';
+import { throwError } from './utils/error-utils.js';
 dotenv.config();
 
 const app = express();
@@ -21,6 +22,10 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/users', routes);
+
+app.use('*', (req, res, next) => {
+  throwError('No resource found.', 404);
+});
 
 app.use(errorHandlerMiddleware);
 
