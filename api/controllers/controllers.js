@@ -133,6 +133,7 @@ export const createUser = (req, res, next) => {
   } catch (err) {
     if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       err.message = 'Username already exists';
+      err.statusCode = 400;
     }
 
     next(err);
