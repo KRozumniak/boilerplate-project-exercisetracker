@@ -58,16 +58,12 @@ export function getAllUsers(req, res, next) {
 }
 
 export const getUserById = (id) => {
-  try {
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-    if (!user) {
-      throwError('No user found', 404);
-    }
-
-    return user;
-  } catch (error) {
-    next(error);
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  if (!user) {
+    throwError('No user found', 404);
   }
+
+  return user;
 };
 
 export function getUserLogsById(req, res, next) {
@@ -78,6 +74,9 @@ export function getUserLogsById(req, res, next) {
 
     const { query, params } = req;
     const userId = Number(params.id);
+
+    // checking if user exists
+    getUserById(userId);
 
     if (query && query.from) {
       if (!isDateQueryParamValid(query.from)) {
@@ -104,13 +103,15 @@ export function getUserLogsById(req, res, next) {
       limit: query.limit,
     });
 
-    if (!queriedExercises.length) {
+    const count = getExercisesByUserIdCount(userId);
+
+    if (!count) {
       throwError('No exercises found', 404);
     }
 
     const logs = {
       logs: queriedExercises,
-      count: queriedExercises.length,
+      count,
     };
     return res.json(logs);
   } catch (error) {
@@ -161,4 +162,11 @@ function getQueriedExercisesByUserId({ id, to, from, limit = maxLimit }) {
 
   query = `${initialQuery} ORDER BY date LIMIT ?`;
   return db.prepare(query).all(id, limit);
+}
+
+function getExercisesByUserIdCount(id) {
+  const exercises = db
+    .prepare('SELECT * FROM exercises WHERE userId = ?')
+    .all(id);
+  return exercises.length;
 }
