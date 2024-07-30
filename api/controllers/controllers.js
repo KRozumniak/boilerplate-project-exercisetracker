@@ -104,8 +104,8 @@ export function getUserLogsById(req, res, next) {
     });
 
     const logs = {
-      logs: queriedExercises,
-      count: queriedExercises.length,
+      logs: queriedExercises.logs,
+      count: queriedExercises.count.length,
     };
     return res.json(logs);
   } catch (error) {
@@ -137,23 +137,49 @@ export const createUser = (req, res, next) => {
 
 function getQueriedExercisesByUserId({ id, to, from, limit = maxLimit }) {
   const initialQuery = 'SELECT * FROM exercises WHERE userId = ?';
-  let query = '';
 
   if (from && to) {
-    query = `${initialQuery} AND date BETWEEN date(?) AND date(?) ORDER BY date LIMIT ?`;
-    return db.prepare(query).all(id, from, to, limit);
+    const query = `${initialQuery} AND date BETWEEN date(?) AND date(?) ORDER BY date LIMIT ?`;
+    const countQuery = `${initialQuery} AND date BETWEEN date(?) AND date(?)`;
+
+    const resultCount = db.prepare(countQuery).all(id, from, to);
+    const result = db.prepare(query).all(id, from, to, limit);
+    return {
+      logs: result,
+      count: resultCount,
+    };
   }
 
   if (from && !to) {
-    query = `${initialQuery} AND date BETWEEN date(?) AND date(date) ORDER BY date LIMIT ?`;
-    return db.prepare(query).all(id, from, limit);
+    const query = `${initialQuery} AND date BETWEEN date(?) AND date(date) ORDER BY date LIMIT ?`;
+    const countQuery = `${initialQuery} AND date BETWEEN date(?) AND date(date)`;
+
+    const resultCount = db.prepare(countQuery).all(id, from);
+    const result = db.prepare(query).all(id, from, limit);
+    return {
+      logs: result,
+      count: resultCount,
+    };
   }
 
   if (!from && to) {
-    query = `${initialQuery} AND date BETWEEN date(date) AND date(?) ORDER BY date LIMIT ?`;
-    return db.prepare(query).all(id, to, limit);
+    const query = `${initialQuery} AND date BETWEEN date(date) AND date(?) ORDER BY date LIMIT ?`;
+    const countQuery = `${initialQuery} AND date BETWEEN date(date) AND date(?)`;
+
+    const resultCount = db.prepare(countQuery).all(id, to);
+    const result = db.prepare(query).all(id, to, limit);
+    return {
+      logs: result,
+      count: resultCount,
+    };
   }
 
-  query = `${initialQuery} ORDER BY date LIMIT ?`;
-  return db.prepare(query).all(id, limit);
+  const query = `${initialQuery} ORDER BY date LIMIT ?`;
+
+  const resultCount = db.prepare(initialQuery).all(id);
+  const result = db.prepare(query).all(id, limit);
+  return {
+    logs: result,
+    count: resultCount,
+  };
 }
