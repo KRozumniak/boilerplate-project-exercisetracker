@@ -1,8 +1,6 @@
 import { throwError } from '../../utils/error-utils.js';
 import { db } from '../../initDB.js';
 
-import { filterLogsByDate } from '../../utils/utils.js';
-
 import {
   getValidatedInputs,
   isDateQueryParamValid,
@@ -10,6 +8,7 @@ import {
   isUserIdValid,
   isUsernameValid,
 } from '../../validation.js';
+import { maxLimit } from '../../utils/utils.js';
 
 export function createExercise(req, res, next) {
   try {
@@ -48,7 +47,6 @@ export function createExercise(req, res, next) {
 export function getAllUsers(req, res, next) {
   try {
     const users = db.prepare('SELECT * FROM users').all();
-
     if (!users.length) {
       throwError('No users found', 404);
     }
@@ -99,23 +97,20 @@ export function getUserLogsById(req, res, next) {
       }
     }
 
-    const selectedExercises = getExercisesByUserId(userId, query.limit);
-    if (!selectedExercises.length) {
+    const queriedExercises = getQueriedExercisesByUserId({
+      id: userId,
+      to: query.to,
+      from: query.from,
+      limit: query.limit,
+    });
+
+    if (!queriedExercises.length) {
       throwError('No exercises found', 404);
     }
 
-    const filteredLogsByQueryParams = filterLogsByDate(
-      selectedExercises,
-      query
-    );
-
-    if (!filteredLogsByQueryParams.length) {
-      throwError('No queried exercises found', 404);
-    }
-
     const logs = {
-      logs: filteredLogsByQueryParams,
-      count: filteredLogsByQueryParams.length,
+      logs: queriedExercises,
+      count: queriedExercises.length,
     };
     return res.json(logs);
   } catch (error) {
@@ -145,13 +140,25 @@ export const createUser = (req, res, next) => {
   }
 };
 
-function getExercisesByUserId(id, limit) {
-  const maxLimit = 1000;
-  const qLimit = Number(limit) || maxLimit;
+function getQueriedExercisesByUserId({ id, to, from, limit = maxLimit }) {
+  const initialQuery = 'SELECT * FROM exercises WHERE userId = ?';
+  let query = '';
 
-  const selectedExercises = db
-    .prepare('SELECT * FROM exercises WHERE userId = ? ORDER BY userId LIMIT ?')
-    .all(id, qLimit);
+  if (from && to) {
+    query = `${initialQuery} AND date BETWEEN date(?) AND date(?) ORDER BY date LIMIT ?`;
+    return db.prepare(query).all(id, from, to, limit);
+  }
 
-  return selectedExercises;
+  if (from && !to) {
+    query = `${initialQuery} AND date BETWEEN date(?) AND date(date) ORDER BY date LIMIT ?`;
+    return db.prepare(query).all(id, from, limit);
+  }
+
+  if (!from && to) {
+    query = `${initialQuery} AND date BETWEEN date(date) AND date(?) ORDER BY date LIMIT ?`;
+    return db.prepare(query).all(id, to, limit);
+  }
+
+  query = `${initialQuery} ORDER BY date LIMIT ?`;
+  return db.prepare(query).all(id, limit);
 }
