@@ -103,15 +103,9 @@ export function getUserLogsById(req, res, next) {
       limit: query.limit,
     });
 
-    const count = getExercisesByUserIdCount(userId);
-
-    if (!count) {
-      throwError('No exercises found', 404);
-    }
-
     const logs = {
       logs: queriedExercises,
-      count,
+      count: queriedExercises.length,
     };
     return res.json(logs);
   } catch (error) {
@@ -162,11 +156,4 @@ function getQueriedExercisesByUserId({ id, to, from, limit = maxLimit }) {
 
   query = `${initialQuery} ORDER BY date LIMIT ?`;
   return db.prepare(query).all(id, limit);
-}
-
-function getExercisesByUserIdCount(id) {
-  const exercises = db
-    .prepare('SELECT * FROM exercises WHERE userId = ?')
-    .all(id);
-  return exercises.length;
 }
